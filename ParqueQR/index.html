@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generador de Tickets - Parque de Diversiones</title>
+  <style>
+    #qr-code {
+      margin-top: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #scanner {
+      display: none;
+      margin-top: 20px;
+      width: 100%;
+      max-width: 500px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Bienvenido al Parque de Diversiones 🎢</h1>
+  <button onclick="generarTicket()">Generar Ticket</button>
+  <button onclick="abrirEscaner()">Escanear QR</button>
+
+  <!-- Contenedor para el código QR -->
+  <div id="qr-code"></div>
+
+  <!-- Video para el escáner QR -->
+  <video id="scanner" autoplay></video>
+
+  <!-- Cargar el script de QR Code Styling desde CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.3.1/lib/qr-code-styling.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+  <script>
+    function generarTicket() {
+      // Limpiar el contenedor antes de agregar un nuevo QR
+      const qrCodeContainer = document.getElementById("qr-code");
+      qrCodeContainer.innerHTML = ""; // Limpiar el contenedor
+
+      // Crear un nuevo código QR con solo datos básicos
+      const qrCode = new QRCodeStyling({
+        width: 250,
+        height: 250,
+        type: "svg",
+        data: "https://www.wikipedia.org"  // Cambiar por la URL deseada
+      });
+
+      // En lugar de qrCode.generate(), usar qrCode.append()
+      qrCode.append(qrCodeContainer);
+    }
+
+    // Función para abrir el escáner QR usando la cámara
+    function abrirEscaner() {
+      const scanner = document.getElementById('scanner');
+      scanner.style.display = 'block';
+
+      // Acceder a la cámara
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(function (stream) {
+          scanner.srcObject = stream;
+          detectarQR(scanner);
+        })
+        .catch(function (error) {
+          alert("No se pudo acceder a la cámara.");
+        });
+    }
+
+    // Función para detectar el código QR en el video
+    function detectarQR(scanner) {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+
+      function captura() {
+        canvas.width = scanner.videoWidth;
+        canvas.height = scanner.videoHeight;
+        context.drawImage(scanner, 0, 0, canvas.width, canvas.height);
+
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, canvas.width, canvas.height);
+
+        if (code) {
+          alert("¡Código QR detectado! Acceso concedido.");
+          scanner.srcObject.getTracks().forEach(track => track.stop());  // Detener la cámara después de detectar el QR
+          scanner.style.display = 'none';  // Ocultar el escáner
+          // Aquí podrías procesar el código QR, por ejemplo redirigir a una URL o mostrar más información.
+        } else {
+          requestAnimationFrame(captura);
+        }
+      }
+
+      captura();
+    }
+  </script>
+</body>
+</html>
