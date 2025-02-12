@@ -39,7 +39,11 @@
   <button onclick="verTickets()">Ver Tickets Generados</button>
   <div id="qr-code"></div>
   <video id="scanner" autoplay playsinline></video>
+
+  <input type="text" id="buscarTicket" placeholder="Buscar por código QR..." onkeyup="filtrarTickets()">
+
   <!-- Tabla para mostrar los tickets -->
+ 
   <h2>Tickets Generados</h2>
   <table id="tabla-tickets">
     <thead>
@@ -114,10 +118,23 @@
     <td>${ticket.usado ? "✅ Usado" : "❌ No usado"}</td>
     <td><button class="delete-btn" onclick="eliminarTicket('${doc.id}')">Eliminar</button></td>
 `;
-
         tabla.appendChild(fila);
       });
     }
+
+    function filtrarTickets() {
+  const input = document.getElementById("buscarTicket").value.toUpperCase();
+  const filas = document.querySelectorAll("#tabla-tickets tbody tr");
+
+  filas.forEach(fila => {
+    const codigoQR = fila.cells[0].textContent.toUpperCase();
+    if (codigoQR.includes(input)) {
+      fila.style.display = "";
+    } else {
+      fila.style.display = "none";
+    }
+  });
+}
 
     async function eliminarTicket(ticketId) {
   if (confirm("¿Estás seguro de que quieres eliminar este ticket?")) {
@@ -136,8 +153,6 @@
     }
   }
 }
-
-
 
     async function abrirEscaner() {
       const scanner = document.getElementById('scanner');
@@ -209,8 +224,8 @@
     window.generarTicket = generarTicket;
     window.abrirEscaner = abrirEscaner;
     window.verTickets = verTickets;
+    window.filtrarTickets = filtrarTickets;
     window.eliminarTicket = eliminarTicket;
-
 
   </script>
 </body>
