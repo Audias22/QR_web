@@ -183,7 +183,7 @@ async function exportarTicketsExcel() {
   });
 
   // Ordenar por timestamp (milisegundos)
-  datos.sort((a, b) => a.Timestamp - b.Timestamp);
+  datos.sort((a, b) => b.Timestamp - a.Timestamp);
 
   // Eliminar el campo Timestamp para la exportación
   const datosFormateados = datos.map(item => ({
