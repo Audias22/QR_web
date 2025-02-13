@@ -30,6 +30,10 @@
     th {
       background-color: #f2f2f2;
     }
+    #ticket-stats {
+      margin-top: 20px;
+      font-size: 1.2em;
+    }
   </style>
 </head>
 <body>
@@ -37,13 +41,17 @@
   <button onclick="generarTicket()">Generar Ticket</button>
   <button onclick="abrirEscaner()">Escanear QR</button>
   <button onclick="verTickets()">Ver Tickets Generados</button>
+  <button onclick="exportarTicketsCSV()">Exportar Tickets a CSV</button>
+  <button onclick="exportarTicketsExcel()">Exportar Tickets a Excel</button>
+
+
+  <div id="ticket-stats">Tickets Usados: 0 | Tickets No Usados: 0</div>
+
   <div id="qr-code"></div>
   <video id="scanner" autoplay playsinline></video>
 
   <input type="text" id="buscarTicket" placeholder="Buscar por código QR..." onkeyup="filtrarTickets()">
 
-  <!-- Tabla para mostrar los tickets -->
- 
   <h2>Tickets Generados</h2>
   <table id="tabla-tickets">
     <thead>
@@ -55,11 +63,15 @@
     </thead>
     <tbody></tbody>
   </table>
+
   <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.3.1/lib/qr-code-styling.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-app.js";
     import { getFirestore, collection, addDoc, getDocs, query, where, updateDoc, doc, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/11.3.0/firebase-firestore.js";
+
     const firebaseConfig = {
       apiKey: "AIzaSyBDJeze6ibv446maeLso00v5hWx-7o3vpc",
       authDomain: "parquediversiones-5bef1.firebaseapp.com",
@@ -68,11 +80,14 @@
       messagingSenderId: "534239241861",
       appId: "1:534239241861:web:1113c526f8cfe17c996bec"
     };
+
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+
     function generarCodigoQR() {
       return Math.random().toString(36).substring(2, 10).toUpperCase();
     }
+
     async function guardarTicket(codigoQR) {
       try {
         const docRef = await addDoc(collection(db, "tickets"), {
@@ -80,19 +95,20 @@
           fecha: new Date(),
           usado: false
         });
-        console.log("Ticket guardado con ID: ", docRef.id);
+        actualizarEstadisticas();
         return { id: docRef.id, codigoQR };
       } catch (e) {
         console.error("Error añadiendo documento: ", e);
       }
     }
+
     async function generarTicket() {
       const qrCodeContainer = document.getElementById("qr-code");
       qrCodeContainer.innerHTML = "";
       const { id, codigoQR } = await guardarTicket(generarCodigoQR());
       if (!id) return;
+
       const ticketURL = `https://tuapp.com/ticket/${codigoQR}`;
-      console.log("URL del ticket:", ticketURL);
       const qrCode = new QRCodeStyling({
         width: 250,
         height: 250,
@@ -102,57 +118,133 @@
         backgroundOptions: { color: "#FFF" }
       });
       qrCode.append(qrCodeContainer);
-      console.log("Código QR generado correctamente.");
     }
+
     async function verTickets() {
       const tabla = document.querySelector("#tabla-tickets tbody");
-      tabla.innerHTML = ""; // Limpiar la tabla antes de mostrar nuevos datos
-      const q = query(collection(db, "tickets"), orderBy("fecha", "desc")); // Ordenar por fecha (más recientes primero)
+      tabla.innerHTML = "";
+      const q = query(collection(db, "tickets"), orderBy("fecha", "desc"));
       const querySnapshot = await getDocs(q);
+
       querySnapshot.forEach((doc) => {
         const ticket = doc.data();
         const fila = document.createElement("tr");
         fila.innerHTML = `
-    <td>${ticket.codigoQR}</td>
-    <td>${new Date(ticket.fecha.toDate()).toLocaleString()}</td>
-    <td>${ticket.usado ? "✅ Usado" : "❌ No usado"}</td>
-    <td><button class="delete-btn" onclick="eliminarTicket('${doc.id}')">Eliminar</button></td>
-`;
+          <td>${ticket.codigoQR}</td>
+          <td>${new Date(ticket.fecha.toDate()).toLocaleString()}</td>
+          <td>${ticket.usado ? "✅ Usado" : "❌ No usado"}</td>
+          <td><button class="delete-btn" onclick="eliminarTicket('${doc.id}')">Eliminar</button></td>
+        `;
         tabla.appendChild(fila);
       });
+      actualizarEstadisticas();
+    }
+
+   // Función para exportar tickets a CSV (formato compatible con Excel)
+      async function exportarTicketsCSV() {
+  // Consulta ordenada cronológicamente
+  const q = query(collection(db, "tickets"), orderBy("fecha", "asc"));
+  const querySnapshot = await getDocs(q);
+
+  // Iniciar el contenido con los encabezados, usando espacios para simular el ancho
+  let csvContent = "Código QR         ;Fecha                  ;Estado\n";
+
+  // Recopilar datos y agregar al contenido CSV
+  querySnapshot.forEach((doc) => {
+    const ticket = doc.data();
+    const codigoQR = ticket.codigoQR.padEnd(15, " "); // Ajuste de longitud
+    const fecha = new Date(ticket.fecha.toDate()).toLocaleString().padEnd(20, " ");
+    const estado = (ticket.usado ? "Usado" : "No usado").padEnd(10, " ");
+    csvContent += `${codigoQR};${fecha};${estado}\n`;
+  });
+
+  // Crear el archivo CSV y descargarlo
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  saveAs(blob, "tickets.csv");
+}
+
+// Función para exportar tickets a Excel (ordenados cronológicamente correctamente)
+async function exportarTicketsExcel() {
+  // Consultar todos los tickets sin ordenar
+  const q = query(collection(db, "tickets"));
+  const querySnapshot = await getDocs(q);
+  const datos = [];
+
+  // Recopilar datos con timestamp para ordenarlos después
+  querySnapshot.forEach((doc) => {
+    const ticket = doc.data();
+    const fecha = ticket.fecha.toDate();
+    datos.push({
+      "Código QR": ticket.codigoQR,
+      "Fecha": fecha.toLocaleString("es-ES"), // Fecha legible para Excel
+      "Timestamp": fecha.getTime(), // Timestamp para ordenar
+      "Estado": ticket.usado ? "Usado" : "No usado"
+    });
+  });
+
+  // Ordenar por timestamp (milisegundos)
+  datos.sort((a, b) => a.Timestamp - b.Timestamp);
+
+  // Eliminar el campo Timestamp para la exportación
+  const datosFormateados = datos.map(item => ({
+    "Código QR": item["Código QR"],
+    "Fecha": item["Fecha"],
+    "Estado": item["Estado"]
+  }));
+
+  // Crear hoja de cálculo
+  const ws = XLSX.utils.json_to_sheet(datosFormateados);
+
+  // Establecer el ancho de las columnas
+  ws['!cols'] = [
+    { wch: 15 }, // Código QR
+    { wch: 24 }, // Fecha
+    { wch: 12 }  // Estado
+  ];
+
+  // Crear libro de trabajo y exportar
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Tickets");
+  XLSX.writeFile(wb, "tickets.xlsx");
+}
+
+    async function actualizarEstadisticas() {
+      const q = query(collection(db, "tickets"));
+      const querySnapshot = await getDocs(q);
+      let usados = 0;
+      let noUsados = 0;
+
+      querySnapshot.forEach((doc) => {
+        const ticket = doc.data();
+        ticket.usado ? usados++ : noUsados++;
+      });
+
+      document.getElementById("ticket-stats").textContent = `Tickets Usados: ${usados} | Tickets No Usados: ${noUsados}`;
     }
 
     function filtrarTickets() {
-  const input = document.getElementById("buscarTicket").value.toUpperCase();
-  const filas = document.querySelectorAll("#tabla-tickets tbody tr");
-
-  filas.forEach(fila => {
-    const codigoQR = fila.cells[0].textContent.toUpperCase();
-    if (codigoQR.includes(input)) {
-      fila.style.display = "";
-    } else {
-      fila.style.display = "none";
+      const input = document.getElementById("buscarTicket").value.toUpperCase();
+      const filas = document.querySelectorAll("#tabla-tickets tbody tr");
+      filas.forEach(fila => {
+        const codigoQR = fila.cells[0].textContent.toUpperCase();
+        fila.style.display = codigoQR.includes(input) ? "" : "none";
+      });
     }
-  });
-}
 
     async function eliminarTicket(ticketId) {
-  if (confirm("¿Estás seguro de que quieres eliminar este ticket?")) {
-    try {
-      const ticketRef = doc(db, "tickets", ticketId);
-      await deleteDoc(ticketRef);
-      alert("🗑️ Ticket eliminado correctamente.");
-      
-      // Esperamos un momento y refrescamos la tabla para reflejar el cambio
-      setTimeout(() => {
-        verTickets();
-      }, 500);
-    } catch (e) {
-      console.error("Error eliminando ticket:", e);
-      alert("❌ Error eliminando el ticket. Revisa la consola.");
+      if (confirm("¿Estás seguro de que quieres eliminar este ticket?")) {
+        try {
+          const ticketRef = doc(db, "tickets", ticketId);
+          await deleteDoc(ticketRef);
+          alert("🗑️ Ticket eliminado correctamente.");
+          verTickets();
+          actualizarEstadisticas();
+        } catch (e) {
+          console.error("Error eliminando ticket:", e);
+          alert("❌ Error eliminando el ticket. Revisa la consola.");
+        }
+      }
     }
-  }
-}
 
     async function abrirEscaner() {
       const scanner = document.getElementById('scanner');
@@ -166,6 +258,7 @@
         console.error("Error de cámara:", error);
       }
     }
+
     function detectarQR(scanner) {
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
@@ -177,7 +270,6 @@
           const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
           const code = jsQR(imageData.data, canvas.width, canvas.height);
           if (code) {
-            console.log("QR detectado:", code.data);
             const codigoExtraido = extraerCodigoQR(code.data);
             verificarTicket(codigoExtraido);
             detenerEscaner(scanner);
@@ -190,6 +282,7 @@
       }
       captura();
     }
+
     function extraerCodigoQR(url) {
       try {
         const urlObj = new URL(url);
@@ -198,8 +291,8 @@
         return url;
       }
     }
+
     async function verificarTicket(codigoQR) {
-      console.log("Verificando ticket con código:", codigoQR);
       const q = query(collection(db, "tickets"), where("codigoQR", "==", codigoQR));
       const querySnapshot = await getDocs(q);
       if (querySnapshot.empty) {
@@ -214,19 +307,25 @@
         } else {
           await updateDoc(ticketRef, { usado: true });
           alert("✅ Ticket válido. Acceso concedido.");
+          actualizarEstadisticas();
         }
       });
     }
+
     function detenerEscaner(scanner) {
       scanner.srcObject.getTracks().forEach(track => track.stop());
       scanner.style.display = 'none';
     }
+
     window.generarTicket = generarTicket;
     window.abrirEscaner = abrirEscaner;
     window.verTickets = verTickets;
     window.filtrarTickets = filtrarTickets;
     window.eliminarTicket = eliminarTicket;
-
+    window.exportarTicketsCSV = exportarTicketsCSV;
+    window.exportarTicketsExcel = exportarTicketsExcel;
+    window.onload = actualizarEstadisticas;
+  
   </script>
 </body>
 </html>
