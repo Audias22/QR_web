@@ -38,7 +38,7 @@
 </head>
 <body>
   <h1>Bienvenido al Parque de Diversiones 🎢</h1>
-  <button onclick="generarTicket()">Generar Ticket</button>
+  <!-- <button onclick="generarTicket()">Generar Ticket</button> -->
   <button onclick="abrirEscaner()">Escanear QR</button>
   <button onclick="verTickets()">Ver Tickets Generados</button>
   <button onclick="exportarTicketsCSV()">Exportar Tickets a CSV</button>
@@ -102,7 +102,7 @@
       }
     }
 
-    async function generarTicket() {
+   /* async function generarTicket() {
       const qrCodeContainer = document.getElementById("qr-code");
       qrCodeContainer.innerHTML = "";
       const { id, codigoQR } = await guardarTicket(generarCodigoQR());
@@ -118,7 +118,7 @@
         backgroundOptions: { color: "#FFF" }
       });
       qrCode.append(qrCodeContainer);
-    }
+    }*/
 
     async function verTickets() {
       const tabla = document.querySelector("#tabla-tickets tbody");
@@ -293,31 +293,43 @@ async function exportarTicketsExcel() {
     }
 
     async function verificarTicket(codigoQR) {
-      const q = query(collection(db, "tickets"), where("codigoQR", "==", codigoQR));
-      const querySnapshot = await getDocs(q);
-      if (querySnapshot.empty) {
-        alert("❌ Ticket no válido.");
+    console.log("🔍 Escaneando ticket con código:", codigoQR);
+
+    if (!codigoQR) {
+        alert("⚠️ No se proporcionó un código QR válido.");
         return;
-      }
-      querySnapshot.forEach(async (documento) => {
-        const ticketData = documento.data();
-        const ticketRef = doc(db, "tickets", documento.id);
-        if (ticketData.usado) {
-          alert("⚠️ Ticket ya ha sido utilizado.");
-        } else {
-          await updateDoc(ticketRef, { usado: true });
-          alert("✅ Ticket válido. Acceso concedido.");
-          actualizarEstadisticas();
-        }
-      });
     }
 
+    const q = query(collection(db, "tickets"), where("codigoQR", "==", codigoQR));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+        console.warn("❌ Ticket NO encontrado en Firebase:", codigoQR);
+        alert("❌ Ticket no válido.");
+        return;
+    }
+
+    querySnapshot.forEach(async (documento) => {
+        const ticketData = documento.data();
+        const ticketRef = doc(db, "tickets", documento.id);
+
+        console.log("✅ Ticket encontrado en Firebase:", ticketData);
+
+        if (ticketData.usado) {
+            alert("⚠️ Ticket ya ha sido utilizado.");
+        } else {
+            await updateDoc(ticketRef, { usado: true });
+            alert("✅ Ticket válido. Acceso concedido.");
+            actualizarEstadisticas();
+        }
+    });
+}
     function detenerEscaner(scanner) {
       scanner.srcObject.getTracks().forEach(track => track.stop());
       scanner.style.display = 'none';
     }
 
-    window.generarTicket = generarTicket;
+    //window.generarTicket = generarTicket;
     window.abrirEscaner = abrirEscaner;
     window.verTickets = verTickets;
     window.filtrarTickets = filtrarTickets;
