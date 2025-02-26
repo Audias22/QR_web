@@ -37,7 +37,7 @@
   </style>
 </head>
 <body>
-  <h1>Bienvenido al Parque de Diversiones 🎢</h1>
+  <h1>ADMINISTRADOR DE DATOS DEL PARQUE DIVERSION INFINITA  🎢</h1>
   <!-- <button onclick="generarTicket()">Generar Ticket</button> -->
   <button onclick="abrirEscaner()">Escanear QR</button>
   <button onclick="verTickets()">Ver Tickets Generados</button>
@@ -260,39 +260,51 @@ async function exportarTicketsExcel() {
     }
 
     function detectarQR(scanner) {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      function captura() {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+
+    function captura() {
         if (scanner.readyState === scanner.HAVE_ENOUGH_DATA) {
-          canvas.width = scanner.videoWidth;
-          canvas.height = scanner.videoHeight;
-          context.drawImage(scanner, 0, 0, canvas.width, canvas.height);
-          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, canvas.width, canvas.height);
-          if (code) {
-            const codigoExtraido = extraerCodigoQR(code.data);
-            verificarTicket(codigoExtraido);
-            detenerEscaner(scanner);
-          } else {
-            requestAnimationFrame(captura);
-          }
+            canvas.width = scanner.videoWidth;
+            canvas.height = scanner.videoHeight;
+            context.drawImage(scanner, 0, 0, canvas.width, canvas.height);
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, canvas.width, canvas.height);
+
+            if (code) {
+                console.log("📸 Código QR detectado:", code.data); // ✅ Ver el código escaneado
+                const codigoExtraido = extraerCodigoQR(code.data);
+                console.log("🔍 Código QR procesado:", codigoExtraido); // ✅ Ver el ID extraído
+                verificarTicket(codigoExtraido);
+                detenerEscaner(scanner);
+            } else {
+                requestAnimationFrame(captura);
+            }
         } else {
-          requestAnimationFrame(captura);
+            requestAnimationFrame(captura);
         }
-      }
-      captura();
     }
+    captura();
+}
+function extraerCodigoQR(qrData) {
+    try {
+        console.log("🔍 Código QR recibido:", qrData);
 
-    function extraerCodigoQR(url) {
-      try {
-        const urlObj = new URL(url);
-        return urlObj.pathname.split("/").pop();
-      } catch (e) {
-        return url;
-      }
+        if (qrData.includes("ticket=")) {
+            const id = qrData.split("ticket=")[1]; // Extraer solo el transactionId
+            console.log("✅ Transaction ID extraído:", id);
+            return id;
+        }
+        
+        return qrData;
+    } catch (e) {
+        console.error("⚠️ Error al procesar código QR:", e);
+        return qrData;
     }
+}
 
-    async function verificarTicket(codigoQR) {
+
+async function verificarTicket(codigoQR) {
     console.log("🔍 Escaneando ticket con código:", codigoQR);
 
     if (!codigoQR) {
@@ -300,11 +312,21 @@ async function exportarTicketsExcel() {
         return;
     }
 
-    const q = query(collection(db, "tickets"), where("codigoQR", "==", codigoQR));
+    // Asegurar que solo estamos buscando el transactionId correcto
+    let transactionIdEscaneado = extraerCodigoQR(codigoQR);
+    console.log("📌 Código QR final a buscar en Firebase:", transactionIdEscaneado);
+
+    const q = query(collection(db, "tickets"), where("codigoQR", "==", transactionIdEscaneado));
     const querySnapshot = await getDocs(q);
 
     if (querySnapshot.empty) {
-        console.warn("❌ Ticket NO encontrado en Firebase:", codigoQR);
+        console.warn("❌ Ticket NO encontrado en Firebase:", transactionIdEscaneado);
+        
+        // 🔥 Mostrar TODOS los tickets guardados en Firebase para depuración
+        const allTickets = await getDocs(collection(db, "tickets"));
+        console.log("📋 Todos los tickets en Firebase:");
+        allTickets.forEach(doc => console.log(doc.data()));
+
         alert("❌ Ticket no válido.");
         return;
     }
