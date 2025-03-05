@@ -160,73 +160,92 @@
     actualizarEstadisticas();
 }
    // Función para exportar tickets a CSV (formato compatible con Excel)
-      async function exportarTicketsCSV() {
-  // Consulta ordenada cronológicamente
-  const q = query(collection(db, "tickets"), orderBy("fecha", "asc"));
-  const querySnapshot = await getDocs(q);
+   async function exportarTicketsCSV() {
+    const q = query(collection(db, "tickets"), orderBy("fecha", "asc"));
+    const querySnapshot = await getDocs(q);
 
-  // Iniciar el contenido con los encabezados, usando espacios para simular el ancho
-  let csvContent = "Código QR         ;Fecha                  ;Estado\n";
+    let csvContent = "Código QR;Fecha;Entrada;Cantidad de Entradas;Monto Total;Estado\n";
 
-  // Recopilar datos y agregar al contenido CSV
-  querySnapshot.forEach((doc) => {
-    const ticket = doc.data();
-    const codigoQR = ticket.codigoQR.padEnd(15, " "); // Ajuste de longitud
-    const fecha = new Date(ticket.fecha.toDate()).toLocaleString().padEnd(20, " ");
-    const estado = (ticket.usado ? "Usado" : "No usado").padEnd(10, " ");
-    csvContent += `${codigoQR};${fecha};${estado}\n`;
-  });
+    querySnapshot.forEach((doc) => {
+        const ticket = doc.data();
 
-  // Crear el archivo CSV y descargarlo
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-  saveAs(blob, "tickets.csv");
+        const codigoQR = ticket.codigoQR || "N/A";
+        const fecha = ticket.fecha ? new Date(ticket.fecha.toDate()).toLocaleString() : "N/A";
+        const tipoEntrada = ticket.tipoEntrada || "Desconocido";
+        const cantidadEntradas = ticket.cantidadEntradas !== undefined ? ticket.cantidadEntradas : "-";
+        const montoTotal = (typeof ticket.montoTotal === "number") 
+    ? `Q${ticket.montoTotal.toFixed(2)}` 
+    : "-";
+        const estado = ticket.usado ? "Usado" : "No usado";
+
+        csvContent += `${codigoQR};${fecha};${tipoEntrada};${cantidadEntradas};${montoTotal};${estado}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    saveAs(blob, "tickets.csv");
 }
 
 // Función para exportar tickets a Excel (ordenados cronológicamente correctamente)
 async function exportarTicketsExcel() {
-  // Consultar todos los tickets sin ordenar
-  const q = query(collection(db, "tickets"));
-  const querySnapshot = await getDocs(q);
-  const datos = [];
+    // Consultar todos los tickets sin ordenar
+    const q = query(collection(db, "tickets"));
+    const querySnapshot = await getDocs(q);
+    const datos = [];
 
-  // Recopilar datos con timestamp para ordenarlos después
-  querySnapshot.forEach((doc) => {
-    const ticket = doc.data();
-    const fecha = ticket.fecha.toDate();
-    datos.push({
-      "Código QR": ticket.codigoQR,
-      "Fecha": fecha.toLocaleString("es-ES"), // Fecha legible para Excel
-      "Timestamp": fecha.getTime(), // Timestamp para ordenar
-      "Estado": ticket.usado ? "Usado" : "No usado"
+    // Recopilar datos con timestamp para ordenarlos después
+    querySnapshot.forEach((doc) => {
+        const ticket = doc.data();
+        const fecha = ticket.fecha.toDate();
+
+        // ✅ Corrección: Asegurar que montoTotal es un número antes de aplicar toFixed(2)
+        const montoTotal = (typeof ticket.montoTotal === "number") 
+            ? `Q${ticket.montoTotal.toFixed(2)}` 
+            : "-";
+
+        datos.push({
+            "Código QR": ticket.codigoQR || "N/A",
+            "Fecha": fecha.toLocaleString("es-ES"), // Fecha legible para Excel
+            "Timestamp": fecha.getTime(), // Timestamp para ordenar
+            "Entrada": ticket.tipoEntrada || "Desconocido",
+            "Cantidad de Entradas": ticket.cantidadEntradas !== undefined ? ticket.cantidadEntradas : "-",
+            "Monto Total": montoTotal,  // ✅ Ahora siempre será un valor válido
+            "Estado": ticket.usado ? "Usado" : "No usado"
+        });
     });
-  });
 
-  // Ordenar por timestamp (milisegundos)
-  datos.sort((a, b) => b.Timestamp - a.Timestamp);
+    // Ordenar por timestamp (más recientes primero)
+    datos.sort((a, b) => b.Timestamp - a.Timestamp);
 
-  // Eliminar el campo Timestamp para la exportación
-  const datosFormateados = datos.map(item => ({
-    "Código QR": item["Código QR"],
-    "Fecha": item["Fecha"],
-    "Estado": item["Estado"]
-  }));
+    // Eliminar el campo Timestamp para la exportación
+    const datosFormateados = datos.map(item => ({
+        "Código QR": item["Código QR"],
+        "Fecha": item["Fecha"],
+        "Entrada": item["Entrada"],
+        "Cantidad de Entradas": item["Cantidad de Entradas"],
+        "Monto Total": item["Monto Total"],
+        "Estado": item["Estado"]
+    }));
 
-  // Crear hoja de cálculo
-  const ws = XLSX.utils.json_to_sheet(datosFormateados);
+    // Crear hoja de cálculo
+    const ws = XLSX.utils.json_to_sheet(datosFormateados);
 
-  // Establecer el ancho de las columnas
-  ws['!cols'] = [
-    { wch: 15 }, // Código QR
-    { wch: 24 }, // Fecha
-    { wch: 12 }  // Estado
-  ];
+    // Establecer el ancho de las columnas
+    ws['!cols'] = [
+        { wch: 15 }, // Código QR
+        { wch: 24 }, // Fecha
+        { wch: 20 }, // Entrada
+        { wch: 20 }, // Cantidad de Entradas
+        { wch: 15 }, // Monto Total
+        { wch: 12 }  // Estado
+    ];
 
-  // Crear libro de trabajo y exportar
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Tickets");
-  XLSX.writeFile(wb, "tickets.xlsx");
+    // Crear libro de trabajo y exportar
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Tickets");
+    XLSX.writeFile(wb, "tickets.xlsx");
 }
 
+    //funcion Actualizar Estadisticas
     async function actualizarEstadisticas() {
       const q = query(collection(db, "tickets"));
       const querySnapshot = await getDocs(q);
