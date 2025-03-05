@@ -58,7 +58,11 @@
       <tr>
         <th>Código QR</th>
         <th>Fecha</th>
+        <th>Entrada</th>
+        <th>Cantidad de Entradas</th>
+        <th>Monto Total</th>
         <th>Estado</th>
+        <th>Acción</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -121,25 +125,40 @@
     }*/
 
     async function verTickets() {
-      const tabla = document.querySelector("#tabla-tickets tbody");
-      tabla.innerHTML = "";
-      const q = query(collection(db, "tickets"), orderBy("fecha", "desc"));
-      const querySnapshot = await getDocs(q);
+    const tabla = document.querySelector("#tabla-tickets tbody");
+    tabla.innerHTML = "";
 
-      querySnapshot.forEach((doc) => {
+    const q = query(collection(db, "tickets"), orderBy("fecha", "desc"));
+    const querySnapshot = await getDocs(q);
+
+    querySnapshot.forEach((doc) => {
         const ticket = doc.data();
         const fila = document.createElement("tr");
+
+        // ✅ Extraer datos de Firebase y asegurarse de que existan
+        const codigoQR = ticket.codigoQR || "N/A";
+        const fecha = ticket.fecha ? new Date(ticket.fecha.toDate()).toLocaleString() : "N/A";
+        const tipoEntrada = ticket.tipoEntrada || "Desconocido";
+        const cantidadEntradas = ticket.cantidadEntradas !== undefined ? ticket.cantidadEntradas : "-";
+        const montoTotal = ticket.montoTotal !== undefined ? `Q${ticket.montoTotal.toFixed(2)}` : "-";
+        const estado = ticket.usado ? "✅ Usado" : "❌ No usado";
+
+        // ✅ Agregar los datos extraídos a la fila de la tabla
         fila.innerHTML = `
-          <td>${ticket.codigoQR}</td>
-          <td>${new Date(ticket.fecha.toDate()).toLocaleString()}</td>
-          <td>${ticket.usado ? "✅ Usado" : "❌ No usado"}</td>
+          <td>${codigoQR}</td>
+          <td>${fecha}</td>
+          <td>${tipoEntrada}</td>
+          <td>${cantidadEntradas}</td>
+          <td>${montoTotal}</td>
+          <td>${estado}</td>
           <td><button class="delete-btn" onclick="eliminarTicket('${doc.id}')">Eliminar</button></td>
         `;
-        tabla.appendChild(fila);
-      });
-      actualizarEstadisticas();
-    }
 
+        tabla.appendChild(fila);
+    });
+
+    actualizarEstadisticas();
+}
    // Función para exportar tickets a CSV (formato compatible con Excel)
       async function exportarTicketsCSV() {
   // Consulta ordenada cronológicamente
